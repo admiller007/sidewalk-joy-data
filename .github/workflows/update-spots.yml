@@ -1,0 +1,41 @@
+name: Update spots data
+
+# Pulls the latest pins from the live Google My Maps KML feed once a day and
+# commits the regenerated spots.json to this repo's root. The Sidewalk Joy app
+# reads the raw URL of that file, so new joys appear without an app release.
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # 08:00 UTC daily
+  workflow_dispatch: {} # manual "Run workflow" button
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Regenerate spots.json from the live KML feed
+        run: python3 import_sidewalk_joy_kml.py spots.json
+
+      - name: Commit changes if the data changed
+        run: |
+          git config user.name  "sidewalk-joy-bot"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- spots.json; then
+            echo "No changes in the feed today."
+          else
+            count=$(grep -c '"id"' spots.json || echo "?")
+            git add spots.json
+            git commit -m "data: refresh from live KML feed (${count} spots)"
+            git push
+          fi
